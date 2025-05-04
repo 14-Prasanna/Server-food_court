@@ -8,15 +8,16 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const http = require('http');
 const { Server } = require('socket.io');
-const schedule = require('node-schedule'); // Added for scheduling
+const schedule = require('node-schedule');
 const MenuItem = require('./models/MenuItem');
-const DailyInventory = require('./models/DailyInventory'); // Added DailyInventory model
+const DailyInventory = require('./models/DailyInventory');
+const QRCodeLib = require('qrcode');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:8080', 'http://localhost:8081'], // Updated port for admin client
+    origin: ['http://localhost:8080', 'http://localhost:8081'],
     methods: ['GET', 'POST', 'PUT'],
     credentials: true,
   },
@@ -90,7 +91,7 @@ const otpSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   otp: { type: String, required: true },
   type: { type: String, default: 'user' },
-  createdAt: { type: Date, default: Date.now, expires: 300 }, // Expires in 5 minutes
+  createdAt: { type: Date, default: Date.now, expires: 300 },
 });
 const OTP = mongoose.model('OTP', otpSchema);
 
@@ -150,9 +151,29 @@ schedule.scheduleJob('0 0 0 * * *', async () => {
       );
     }
     console.log('Inventory quantities reset at midnight IST');
-    io.emit('inventoryReset'); // Notify clients of reset
+    io.emit('inventoryReset');
   } catch (error) {
     console.error('Error resetting inventory:', error);
+  }
+});
+
+// Deactivate all menu items at 3:30 PM IST
+schedule.scheduleJob('30 15 * * *', async () => {
+  try {
+    const today = getISTDate();
+    console.log(`Deactivating all menu items at 3:30 PM IST on ${today}`);
+    
+    const result = await MenuItem.updateMany(
+      {},
+      { isActive: false, updatedAt: Date.now() }
+    );
+    
+    console.log(`Deactivated ${result.modifiedCount} menu items`);
+
+    const updatedMenuItems = await MenuItem.find();
+    io.emit('menuItemsDeactivated', updatedMenuItems);
+  } catch (error) {
+    console.error('Error deactivating menu items at 3:30 PM IST:', error);
   }
 });
 
@@ -638,17 +659,15 @@ app.post('/verify-payment', async (req, res) => {
   try {
     const order = await Order.create(orderDetails);
 
-    // Send confirmation message based on payment method
     const message = paymentMethod === 'cash'
-      ? `Your order ID ${orderId} total cost ₹${formatCurrency(order.totalAmount)} cash payment method successfully placed. Thank you for choosing us!`
-      : `Your order ID ${orderId} total cost ₹${formatCurrency(order.totalAmount)} UPI payment method successfully placed. Thank you for choosing us!`;
+      ? `Your order ID ${orderId} total cost ₹${formatCurrency(order.totalAmount)} cash payment method successfully placed. Your meal will be ready in 30 mins, after 30 mins buy and grab it. Thank you for choosing us!`
+      : `Your order ID ${orderId} total cost ₹${formatCurrency(order.totalAmount)} UPI payment method successfully placed. Your meal will be ready in 30 mins, after 30 mins buy and grab it. Thank you for choosing us!`;
     await twilioClient.messages.create({
       body: message,
       to: normalizedPhone,
       from: process.env.TWILIO_PHONE_NUMBER,
     });
 
-    // Decrease inventory for all items regardless of payment method
     for (const item of order.items) {
       await DailyInventory.findOneAndUpdate(
         { menuItemId: item.id, date: getISTDate() },
@@ -766,7 +785,6 @@ app.post('/admin/menu-items', async (req, res) => {
     const menuItem = new MenuItem({ name, description, price, category, availableTime, isActive });
     await menuItem.save();
 
-    // Create a daily inventory entry for the new menu item
     const today = getISTDate();
     await DailyInventory.create({
       menuItemId: menuItem._id,
@@ -821,7 +839,7 @@ app.delete('/admin/menu-items/:id', async (req, res) => {
     if (!menuItem) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
-    await DailyInventory.deleteMany({ menuItemId: id }); // Delete associated inventory entries
+    await DailyInventory.deleteMany({ menuItemId: id });
     io.emit('menuItemDeleted', id);
     res.json({ message: 'Menu item deleted' });
   } catch (error) {
@@ -886,9 +904,130 @@ app.delete('/cancel-order', async (req, res) => {
   }
 });
 
+// QR Code Schema
+const qrCodeSchema = new mongoose.Schema({
+  orderId: { type: String, required: true, unique: true },
+  qrCodeData: { type: String, required: true },
+  isUsed: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now, expires: 16200 }, // 4 hours 30 minutes = 16200 seconds
+});
+const QRCode = mongoose.model('QRCode', qrCodeSchema);
+
+// Generate QR Code for an Order
+app.post('/customer/generate-qr', async (req, res) => {
+  const { orderId, phone } = req.body;
+  if (!orderId || !phone) {
+    return res.status(400).json({ error: 'Order ID and phone number are required' });
+  }
+
+  const normalizedPhone = normalizePhone(phone);
+
+  try {
+    const order = await Order.findOne({ orderId, studentPhone: normalizedPhone });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found or unauthorized' });
+    }
+
+    if (order.status !== 'pending') {
+      return res.status(400).json({ error: 'QR code cannot be generated for non-pending orders' });
+    }
+
+    let qrCodeRecord = await QRCode.findOne({ orderId });
+    if (qrCodeRecord) {
+      if (qrCodeRecord.isUsed) {
+        return res.status(400).json({ error: 'This QR code has already been used or expired' });
+      }
+
+      // Check if the QR code has expired
+      const qrGeneratedTime = new Date(qrCodeRecord.createdAt);
+      const currentTime = new Date();
+      const timeDiffMinutes = (currentTime - qrGeneratedTime) / (1000 * 60);
+
+      if (timeDiffMinutes > 270) { // 4 hours 30 minutes = 270 minutes
+        return res.status(400).json({ error: 'This QR code has expired' });
+      }
+
+      return res.json({ status: 'success', qrCode: qrCodeRecord.qrCodeData });
+    }
+
+    // Encode only the orderId in the QR code
+    const qrData = order.orderId;
+
+    const qrCodeDataUrl = await QRCodeLib.toDataURL(qrData);
+
+    qrCodeRecord = await QRCode.create({ orderId, qrCodeData: qrCodeDataUrl });
+
+    res.json({ status: 'success', qrCode: qrCodeDataUrl });
+  } catch (error) {
+    console.error('Generate QR code error:', error);
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
+// Validate QR Code (for Admin Panel)
+app.post('/admin/validate-qr', async (req, res) => {
+  const { qrCodeData } = req.body;
+  if (!qrCodeData) {
+    return res.status(400).json({ error: 'QR code data is required' });
+  }
+
+  try {
+    const orderId = qrCodeData; // QR code contains only the orderId
+
+    const qrCodeRecord = await QRCode.findOne({ orderId });
+    if (!qrCodeRecord) {
+      return res.status(404).json({ error: 'QR code not found or expired' });
+    }
+
+    if (qrCodeRecord.isUsed) {
+      return res.status(400).json({ error: 'This QR code has already been used' });
+    }
+
+    // Check if the QR code has expired
+    const qrGeneratedTime = new Date(qrCodeRecord.createdAt);
+    const currentTime = new Date();
+    const timeDiffMinutes = (currentTime - qrGeneratedTime) / (1000 * 60);
+
+    if (timeDiffMinutes > 270) { // 4 hours 30 minutes = 270 minutes
+      return res.status(400).json({ error: 'This QR code has expired' });
+    }
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    qrCodeRecord.isUsed = true;
+    await qrCodeRecord.save();
+
+    order.status = 'completed';
+    order.updatedAt = new Date();
+    await order.save();
+
+    io.to('adminRoom').emit('orderUpdated', order);
+
+    await twilioClient.messages.create({
+      body: `Your order ID ${order.orderId} has been successfully scanned and is now complete. Enjoy your meal!`,
+      to: order.studentPhone,
+      from: process.env.TWILIO_PHONE_NUMBER,
+    });
+
+    res.json({
+      status: 'success',
+      order: {
+        orderId: order.orderId,
+        customerName: order.studentName,
+        items: order.items,
+        totalCost: order.totalAmount,
+        dateTime: order.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Validate QR code error:', error);
+    res.status(500).json({ error: 'Failed to validate QR code' });
+  }
+});
+
 server.listen(5000, () => {
   console.log('Server running on http://localhost:5000');
 });
-
-
-
