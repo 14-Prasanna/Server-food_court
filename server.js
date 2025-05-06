@@ -17,23 +17,17 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:8080', 'http://localhost:8081'],
-    methods: ['GET', 'POST', 'PUT'],
+    origin: ['https://14-prasanna.github.io', 'https://14-prasanna.github.io/KiotFoodCourt/','localhost:80881','http://localhost:8080/KiotFoodCourt/'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 app.use(cors({
-  origin: (origin, callback) => {
-    const allowedOrigins = ['http://localhost:8080', 'http://localhost:8081'];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: ['https://14-prasanna.github.io', 'https://14-prasanna.github.io/KiotFoodCourt/','localhost:80881','http://localhost:8080/KiotFoodCourt/'],
   credentials: true,
 }));
+
 app.use(express.json());
 
 // MongoDB Connection
@@ -365,7 +359,7 @@ app.post('/admin/send-otp', async (req, res) => {
 
 // Admin Login Verify OTP
 app.post('/admin/verify-otp', async (req, res) => {
-  console.log('Received verify OTP request:', req.body);
+  console.log('Received admin verify OTP request:', req.body);
   const { phone, otp } = req.body;
   if (!phone || !otp) {
     return res.status(400).json({ error: 'Phone number and OTP are required' });
@@ -386,7 +380,14 @@ app.post('/admin/verify-otp', async (req, res) => {
 
     await OTP.deleteOne({ phone: normalizedPhone, otp });
 
-    res.json({ status: 'success', admin: { name: admin.name, email: admin.email, phone: admin.phone, role: 'admin' } });
+    // Generate a dummy token (you can replace this with a real JWT if needed)
+    const token = crypto.randomBytes(32).toString('hex');
+
+    res.json({ 
+      status: 'success', 
+      user: { name: admin.name, email: admin.email, phone: admin.phone, role: 'admin' },
+      token 
+    });
   } catch (error) {
     console.error('Admin verify OTP error:', error);
     res.status(500).json({ error: 'Failed to verify OTP' });
@@ -446,10 +447,11 @@ app.post('/admin/profile', async (req, res) => {
 
     res.json({
       status: 'success',
-      admin: {
+      user: {
         name: admin.name,
         email: admin.email,
         phone: admin.phone,
+        role: 'admin'
       },
     });
   } catch (error) {
@@ -474,7 +476,10 @@ app.post('/admin/update-profile', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (admin) {
-      res.json({ status: 'success', admin: { name: admin.name, email: admin.email, phone: admin.phone } });
+      res.json({ 
+        status: 'success', 
+        user: { name: admin.name, email: admin.email, phone: admin.phone, role: 'admin' } 
+      });
     } else {
       res.status(404).json({ status: 'error', error: 'Admin not found' });
     }
@@ -543,6 +548,7 @@ app.post('/send-otp', async (req, res) => {
 
 // Verify OTP (for customers and admins)
 app.post('/verify-otp', async (req, res) => {
+  console.log('Received verify OTP request:', req.body); // Debugging log
   const { phone, otp, name, role = 'user' } = req.body;
   if (!phone || !otp) {
     return res.status(400).json({ error: 'Phone number and OTP are required' });
@@ -566,13 +572,24 @@ app.post('/verify-otp', async (req, res) => {
         user.name = name;
         await user.save();
       }
-      res.json({ status: 'success', user: { phone: user.phone, name: user.name, role: 'customer' } });
+      // Generate a dummy token (replace with real JWT if needed)
+      const token = crypto.randomBytes(32).toString('hex');
+      res.json({ 
+        status: 'success', 
+        user: { phone: user.phone, name: user.name, role: 'customer' },
+        token 
+      });
     } else if (otpType === 'admin') {
       user = await Admin.findOne({ phone: normalizedPhone });
       if (!user) {
         return res.status(400).json({ error: 'Admin not found' });
       }
-      res.json({ status: 'success', admin: { name: user.name, email: user.email, phone: user.phone, role: 'admin' } });
+      const token = crypto.randomBytes(32).toString('hex');
+      res.json({ 
+        status: 'success', 
+        user: { name: user.name, email: user.email, phone: user.phone, role: 'admin' },
+        token 
+      });
     }
 
     await OTP.deleteOne({ phone: normalizedPhone, otp });
@@ -739,12 +756,16 @@ app.get('/menu-items', async (req, res) => {
       const inventory = dailyInventories.find((inv) => inv.menuItemId.toString() === menuItem._id.toString());
       return {
         ...menuItem._doc,
+        id: menuItem._id.toString(), // Ensure id is included
         quantity: inventory ? inventory.quantity : 0,
+        timeSlot: menuItem.availableTime, // Match the expected field
+        type: menuItem.category, // Match the expected field
       };
     });
 
-    res.json({ menuItems: menuItemsWithQuantity });
+    res.json({ status: 'success', menuItems: menuItemsWithQuantity });
   } catch (error) {
+    console.error('Fetch menu items error:', error);
     res.status(500).json({ error: 'Failed to fetch menu items' });
   }
 });
@@ -760,9 +781,12 @@ app.get('/menu-items/:id', async (req, res) => {
     const inventory = await DailyInventory.findOne({ menuItemId: menuItem._id, date: today });
     const menuItemWithQuantity = {
       ...menuItem._doc,
+      id: menuItem._id.toString(),
       quantity: inventory ? inventory.quantity : 0,
+      timeSlot: menuItem.availableTime,
+      type: menuItem.category,
     };
-    res.json({ menuItem: menuItemWithQuantity });
+    res.json({ status: 'success', menuItem: menuItemWithQuantity });
   } catch (error) {
     console.error('Error fetching menu item:', error);
     res.status(500).json({ error: 'Failed to fetch menu item' });
@@ -869,7 +893,7 @@ app.put('/admin/daily-inventory/:menuItemId', async (req, res) => {
 
   try {
     console.log('Received update request for menuItemId:', menuItemId, 'with quantity:', quantity);
-    const today = getISTDate();
+   const today = getISTDate();
     const dailyInventory = await DailyInventory.findOneAndUpdate(
       { menuItemId, date: today },
       { quantity },
