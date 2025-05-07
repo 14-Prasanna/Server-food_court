@@ -17,22 +17,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      'https://14-prasanna.github.io',
-      'https://14-prasanna.github.io/KiotFoodCourt',
-      'localhost:8080',
-    ],
+    origin: ['localhost:8080'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 app.use(cors({
-  origin: [
-    'https://14-prasanna.github.io',
-    'https://14-prasanna.github.io/KiotFoodCourt',
-    'localhost:8080',
-  ],
+  origin: ['localhost:8080'],
   credentials: true,
 }));
 
@@ -764,10 +756,10 @@ app.get('/menu-items', async (req, res) => {
       const inventory = dailyInventories.find((inv) => inv.menuItemId.toString() === menuItem._id.toString());
       return {
         ...menuItem._doc,
-        id: menuItem._id.toString(), // Ensure id is included
+        id: menuItem._id.toString(),
         quantity: inventory ? inventory.quantity : 0,
-        timeSlot: menuItem.availableTime, // Match the expected field
-        type: menuItem.category, // Match the expected field
+        timeSlot: menuItem.availableTime,
+        type: menuItem.category,
       };
     });
 
