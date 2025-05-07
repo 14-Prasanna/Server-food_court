@@ -20,6 +20,7 @@ const io = new Server(server, {
     origin: [
       'https://14-prasanna.github.io',
       'https://14-prasanna.github.io/KiotFoodCourt',
+      'localhost:8080',
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
@@ -30,6 +31,7 @@ app.use(cors({
   origin: [
     'https://14-prasanna.github.io',
     'https://14-prasanna.github.io/KiotFoodCourt',
+    'localhost:8080',
   ],
   credentials: true,
 }));
