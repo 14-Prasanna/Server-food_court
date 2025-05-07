@@ -17,14 +17,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['https://14-prasanna.github.io', 'https://14-prasanna.github.io/KiotFoodCourt/','localhost:80881','http://localhost:8080/KiotFoodCourt/'],
+    origin: [
+      'https://14-prasanna.github.io',
+      'https://14-prasanna.github.io/KiotFoodCourt',
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
 app.use(cors({
-  origin: ['https://14-prasanna.github.io', 'https://14-prasanna.github.io/KiotFoodCourt/','localhost:80881','http://localhost:8080/KiotFoodCourt/'],
+  origin: [
+    'https://14-prasanna.github.io',
+    'https://14-prasanna.github.io/KiotFoodCourt',
+  ],
   credentials: true,
 }));
 
