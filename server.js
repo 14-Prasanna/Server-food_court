@@ -15,17 +15,41 @@ const QRCodeLib = require('qrcode');
 
 const app = express();
 const server = http.createServer(app);
+
+// Define allowed origins (both HTTP and HTTPS for localhost and production domains)
+const allowedOrigins = [
+  'http://localhost:8080',
+  'https://localhost:8080',
+  'https://server-food-court.onrender.com', // Add your backend domain
+  // Add your frontend production domain here if applicable, e.g., 'https://your-frontend-domain.com'
+];
+
+// CORS configuration for Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:8080'], // Add protocol
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g., Postman) or origins in the allowed list
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
-// Updated CORS configuration for Express
+// CORS configuration for Express
 app.use(cors({
-  origin: ['http://localhost:8080'], // Add protocol
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., Postman) or origins in the allowed list
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
@@ -894,7 +918,7 @@ app.put('/admin/daily-inventory/:menuItemId', async (req, res) => {
 
   try {
     console.log('Received update request for menuItemId:', menuItemId, 'with quantity:', quantity);
-   const today = getISTDate();
+    const today = getISTDate();
     const dailyInventory = await DailyInventory.findOneAndUpdate(
       { menuItemId, date: today },
       { quantity },
