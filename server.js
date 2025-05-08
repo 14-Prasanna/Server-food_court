@@ -20,8 +20,8 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:8080',
   'https://localhost:8080',
-  'https://server-food-court.onrender.com', // Add your backend domain
-  // Add your frontend production domain here if applicable, e.g., 'https://your-frontend-domain.com'
+  'https://server-food-court.onrender.com',
+  'https://your-username.github.io/your-repo-name', // Replace with your GitHub Pages URL
 ];
 
 // CORS configuration for Socket.IO
