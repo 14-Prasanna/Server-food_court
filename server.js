@@ -21,17 +21,24 @@ const allowedOrigins = [
   'http://localhost:8080',
   'https://localhost:8080',
   'https://server-food-court.onrender.com',
-  'https://14-prasanna.github.io/Food_Court/', // Replace with your GitHub Pages URL
+  'https://14-prasanna.github.io/Food_Court',
+  'https://14-prasanna.github.io'
 ];
+
+const normalizeOrigin = (origin) => {
+  if (!origin) return origin;
+  return origin.replace(/\/+$/, ''); // Remove trailing slashes
+};
 
 // CORS configuration for Socket.IO
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g., Postman) or origins in the allowed list
-      if (!origin || allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (!origin || allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
+        console.log('CORS rejected origin:', origin); // Debugging log
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -43,10 +50,11 @@ const io = new Server(server, {
 // CORS configuration for Express
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., Postman) or origins in the allowed list
-    if (!origin || allowedOrigins.includes(origin)) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (!origin || allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
     } else {
+      console.log('CORS rejected origin:', origin); // Debugging log
       callback(new Error('Not allowed by CORS'));
     }
   },
