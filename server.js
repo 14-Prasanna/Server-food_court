@@ -21,7 +21,7 @@ const allowedOrigins = [
   'http://localhost:8080',
   'https://localhost:8080',
   'https://server-food-court.onrender.com',
-  'https://your-username.github.io/your-repo-name', // Replace with your GitHub Pages URL
+  ' https://14-prasanna.github.io/Food_Court/', // Replace with your GitHub Pages URL
 ];
 
 // CORS configuration for Socket.IO
