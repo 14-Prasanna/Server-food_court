@@ -17,14 +17,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['localhost:8080'],
+    origin: ['http://localhost:8080'], // Add protocol
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
 });
 
+// Updated CORS configuration for Express
 app.use(cors({
-  origin: ['localhost:8080'],
+  origin: ['http://localhost:8080'], // Add protocol
   credentials: true,
 }));
 
