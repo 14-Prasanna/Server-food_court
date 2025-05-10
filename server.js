@@ -16,14 +16,15 @@ const QRCodeLib = require('qrcode');
 const app = express();
 const server = http.createServer(app);
 
-// Define allowed origins (both HTTP and HTTPS for localhost and production domains)
+// Define allowed origins
 const allowedOrigins = [
   'http://localhost:8080',
+  'http://localhost:5173', // Vite default port
   'https://localhost:8080',
   'https://server-food-court.onrender.com',
   'https://14-prasanna.github.io/Food_Court',
   'https://14-prasanna.github.io',
-  'https://14-prasanna.github.io/Kiot-Admin/'
+  'https://14-prasanna.github.io/Kiot-Admin'
 ];
 
 const normalizeOrigin = (origin) => {
@@ -31,7 +32,7 @@ const normalizeOrigin = (origin) => {
   return origin.replace(/\/+$/, ''); // Remove trailing slashes
 };
 
-// CORS configuration for Socket.IO
+// Socket.IO CORS and timeout configuration
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
@@ -39,23 +40,25 @@ const io = new Server(server, {
       if (!origin || allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
-        console.log('CORS rejected origin:', origin); // Debugging log
+        console.log('CORS rejected origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
+  pingTimeout: 60000, // 60 seconds
+  pingInterval: 25000, // 25 seconds
 });
 
-// CORS configuration for Express
+// Express CORS configuration
 app.use(cors({
   origin: (origin, callback) => {
     const normalizedOrigin = normalizeOrigin(origin);
     if (!origin || allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
     } else {
-      console.log('CORS rejected origin:', origin); // Debugging log
+      console.log('CORS rejected origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
