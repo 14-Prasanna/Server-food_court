@@ -22,7 +22,7 @@ const allowedOrigins = [
   'https://localhost:8080',
   'https://server-food-court.onrender.com',
   'https://14-prasanna.github.io/Food_Court',
-  'https://14-prasanna.github.io'
+  'https://14-prasanna.github.io',
   'https://14-prasanna.github.io/Kiot-Admin/'
 ];
 
